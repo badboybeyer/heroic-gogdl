@@ -5,6 +5,7 @@ import logging
 import os.path
 import requests
 import time
+from urllib.parse import quote
 from gogdl import version
 
 CODE_URL = "https://auth.gog.com/token?client_id=46899977096215655&client_secret=9d85c43b1482497dbbce61f6e4aa173a433796eeae2ca8c5f6129f2dc4de46d9&grant_type=authorization_code&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient&code="
@@ -107,7 +108,14 @@ class AuthorizationManager:
         except (requests.ConnectionError, requests.Timeout):
             self.logger.error("Failed to refresh credentials")
             return False
+        self.logger.debug("Token refresh — HTTP %s %s", response.status_code, response.reason)
+        self.logger.debug("Response headers: %s", dict(response.headers))
+        self.logger.debug("Response body: %s", response.text)
         if not response.ok:
+            self.logger.error(
+                "Token refresh failed: HTTP %s %s — body: %s",
+                response.status_code, response.reason, response.text
+            )
             return False
         data = response.json()
         data["loginTime"] = time.time()
@@ -119,12 +127,25 @@ class AuthorizationManager:
         self.logger.debug("Handling cli")
 
         if arguments.authorization_code:
-            response = self.session.get(CODE_URL + arguments.authorization_code)
+            response = self.session.get(CODE_URL + quote(arguments.authorization_code, safe=''))
+
+            self.logger.debug("Auth code exchange — HTTP %s %s", response.status_code, response.reason)
+            self.logger.debug("Response headers: %s", dict(response.headers))
+            self.logger.debug("Response body: %s", response.text)
 
             if not response.ok:
+                self.logger.error(
+                    "Auth code exchange failed: HTTP %s %s — body: %s",
+                    response.status_code, response.reason, response.text
+                )
                 print(json.dumps({"error": True}))
                 return
             data = response.json()
+            if "error" in data.keys():
+                self.logger.debug(
+                    "Parsed token response keys: %s, contains 'error': %s",
+                    list(data.keys()), "error" in data
+                )
             data.update({"loginTime": time.time()})
 
             self.credentials_data.update({CLIENT_ID: data})
