@@ -146,6 +146,18 @@ class AuthorizationManager:
                     "Parsed token response keys: %s, contains 'error': %s",
                     list(data.keys()), "error" in data
                 )
+            # GOG may include "error" in a successful (HTTP 200) response body.
+            # Only discard it if valid tokens are actually present, so callers
+            # can rely on the absence of "error" to mean success.
+            if data.get("access_token") and data.get("refresh_token"):
+                data.pop("error", None)
+            elif data.get("error"):
+                self.logger.error(
+                    "Auth code exchange returned HTTP 200 but no valid tokens. Response keys: %s",
+                    list(data.keys())
+                )
+                print(json.dumps({"error": True}))
+                return
             data.update({"loginTime": time.time()})
 
             self.credentials_data.update({CLIENT_ID: data})
